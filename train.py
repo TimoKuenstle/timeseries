@@ -82,7 +82,7 @@ with tf.sg_context(name='generator', size=(4, 1), stride=(2, 1), act='relu', bn=
            .sg_reshape(shape=(-1, window/8, 1, 128))
            .sg_upconv(dim=64)
            .sg_upconv(dim=32)
-           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  #Output Dimension der Spalten entspricht der Anzahl des Lerndatensatzes
+           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  #Outputdimension der Spalten entspricht der Anzahl des Lerndatensatzes
 
 
 # Diskriminator
