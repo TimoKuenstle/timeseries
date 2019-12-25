@@ -85,7 +85,7 @@ with tf.sg_context(name='generator', size=(4, 1), stride=(2, 1), act='relu', bn=
            .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  #Output Dimension der Spalten entspricht der Anzahl des Lerndatensatzes
 
 
-# Definieren des Diskriminatornetzwerkes
+# Diskriminator
 
 print x
 print  gen
