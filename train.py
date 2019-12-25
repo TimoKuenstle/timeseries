@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 import sugartensor as tf
 import numpy as np
 
