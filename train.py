@@ -3,39 +3,36 @@ import sugartensor as tf
 import numpy as np
 
 
-__author__ = 'njkim@jamonglab.com'
-
-
 class TimeSeriesData(object):
 
     def __init__(self, batch_size=128):
 
-        # load data
-        x = np.genfromtxt('asset/data/sample.csv', delimiter=',', dtype=np.float32)
+        #Laden des Trainingsdatensatzes
+        x = np.genfromtxt('asset/data/sample.csv', delimiter=',', dtype=np.float32) 
         x = x[1:, 1:]
 
-        window = 384  # window size 
-        #window = vielfaches von batch size? 12 * 32 = 384
-        #max = 3000  # max value
-        max = np.amax(x)
+        window = 384  # Fenstergröße, gibt unter anderem die Anzahl an generierten Beobachtungen an.  
+       
+        #Normieren der Daten
+        max = np.amax(x) #Maximalwert über alle Daten bestimmen
         print("Maximum", max)
 
-        # delete zero pad data
+        # Nullzeilen löschen und Datenformat anpassen, so dass ein vielfaches des
+        # Fenstergröße erzeugt wird.
         n = ((np.where(np.any(x, axis=1))[0][-1] + 1) // window) * window 
 
-        # normalize data between 0 and 1
+        # Daten zwischen 0 und 1 normieren um die Leistungsfähigkeit des GANs zu optimieren 
+        #und die Rechenzeiten zu minimieren
         x = x[:n] / max
         print(x)
 
-        # make to matrix
+        # Zeitreihe in Matrixform bringen und zufällige Werte ziehen
         X = np.asarray([x[i:i+window] for i in range(n-window)])
         print(X.shape)
-        # shuffle data
         np.random.shuffle(X)
         X = np.expand_dims(X, axis=2)
 
-        # save to member variable
-        self.batch_size = batch_size #speicher batch size von oben
+        self.batch_size = batch_size #Input Batchsize übernehmen
         self.X = tf.sg_data._data_to_tensor([X], batch_size, name='train')
         self.num_batch = X.shape[0] // batch_size
 
@@ -43,106 +40,90 @@ class TimeSeriesData(object):
         self.X = tf.to_float(self.X)
 
 
-# set log level to debug
+
 tf.sg_verbosity(10)
 
-#
-# hyper parameters
-#
+# Hyper Parameter bestimmen
 
-batch_size = 128   # batch size
-num_category = 10  # category variable number
-num_cont = 3   # continuous variable number (standard = 2)
-num_dim = 50   # total latent dimension ( category + continuous + noise )
-max_ep = 100
+batch_size = 128   # Batchsize bestimmen 
+num_category = 10  # Anzahl an kotegorischen Variablen definieren 
+num_cont = 3   # Anzahl der zu erzeugenden Zeitreihen 
+num_dim = 50   # Anzahl an latenten Dimensionen 
+max_ep = 100   # Anzahl an Trainingsepochen
 
-#
-# inputs
-#
+# Inputs
 
-# input tensor ( with QueueRunner )
+# Input tensor 
 data = TimeSeriesData(batch_size=batch_size)
 x = data.X
 
-# generator labels ( all ones )
+# Generator Labels (alle=1)
 y = tf.ones(batch_size, dtype=tf.sg_floatx)
 
-# discriminator labels ( half 1s, half 0s )
+# Diskriminator Labels (1 und 0)
 y_disc = tf.concat([y, y * 0], 0)
 
 
-#
-# create generator
-#
 
-# random class number
+# Generator
+
 z_cat = tf.multinomial(tf.ones((batch_size, num_category), dtype=tf.sg_floatx) / num_category, 1).sg_squeeze()
 
-# random seed = random categorical variable + random uniform
+# Zufälliger Seed 
 z = z_cat.sg_one_hot(depth=num_category).sg_concat(target=tf.random_uniform((batch_size, num_dim-num_category)))
 
-# random continuous variable
+# zufällige stetige Variable
 z_cont = z[:, num_category:num_category+num_cont]
 
-# generator network
+# Definieren des Generatornetzwerkes 
 with tf.sg_context(name='generator', size=(4, 1), stride=(2, 1), act='relu', bn=True):
     gen = (z.sg_dense(dim=1024)
-           .sg_dense(dim=window / 8*1*128) #48 * 8 = 384 muss so sein!
+           .sg_dense(dim=window / 8*1*128) #Fenstergröße muss in diesem Fall durch 8 teilbar sein
            .sg_reshape(shape=(-1, window/8, 1, 128))
            .sg_upconv(dim=64)
            .sg_upconv(dim=32)
-           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  #dim hier = anzahl spalten?! muss = num_cont sein, sonst error (warum auch immer)
-    		#.sg_upconv(dim=2, act='sigmoid', bn=False))
+           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  #Output Dimension der Spalten entspricht der Anzahl des Lerndatensatzes
 
-#
-# create discriminator & recognizer
-#
+
+# Definieren des Diskriminatornetzwerkes
+
 print x
 print  gen
-# create real + fake image input
+# Echte und Falsche Bilder erzeugen, die der Diskriminator nutzt um Daten zu klassifizeren
 xx = tf.concat([x, gen], 0)
 
 with tf.sg_context(name='discriminator', size=(4, 1), stride=(2, 1), act='leaky_relu'):
-    # shared part
     shared = (xx.sg_conv(dim=32)
               .sg_conv(dim=64)
               .sg_conv(dim=128)
               .sg_flatten()
-              .sg_dense(dim=1024))
-    # shared recognizer part
-    recog_shared = shared[batch_size:, :].sg_dense(dim=128)
-    # discriminator end
+              .sg_dense(dim=1024)
+    recog_shared = shared[batch_size:, :].sg_dense(dim=128)           
     disc = shared.sg_dense(dim=1, act='linear').sg_squeeze()
-    # categorical recognizer end
     recog_cat = recog_shared.sg_dense(dim=num_category, act='linear')
-    # continuous recognizer end
     recog_cont = recog_shared.sg_dense(dim=num_cont, act='sigmoid')
 
-#
-# loss and train ops
-#
+# Verlustfunktionen des Netztwerkes definieren. Diese sollen minimer werden
 
-loss_disc = tf.reduce_mean(disc.sg_bce(target=y_disc))  # discriminator loss
-loss_gen = tf.reduce_mean(disc.sg_reuse(input=gen).sg_bce(target=y))  # generator loss
+loss_disc = tf.reduce_mean(disc.sg_bce(target=y_disc))  # Discriminator loss
+loss_gen = tf.reduce_mean(disc.sg_reuse(input=gen).sg_bce(target=y))  # Generator loss
 loss_recog = tf.reduce_mean(recog_cat.sg_ce(target=z_cat)) \
-             + tf.reduce_mean(recog_cont.sg_mse(target=z_cont))  # recognizer loss
+             + tf.reduce_mean(recog_cont.sg_mse(target=z_cont))  # Recognizer loss
 
-train_disc = tf.sg_optim(loss_disc + loss_recog, lr=0.0001, category='discriminator')  # discriminator train ops
-train_gen = tf.sg_optim(loss_gen + loss_recog, lr=0.001, category='generator')  # generator train ops
+train_disc = tf.sg_optim(loss_disc + loss_recog, lr=0.0001, category='discriminator')  # Discriminator train ops
+train_gen = tf.sg_optim(loss_gen + loss_recog, lr=0.001, category='generator')  # Generator train ops
 
 
-#
-# training
-#
-
-# def alternate training func
+# Trainingsprozess des GANs
+              
+#Definiere Trainingsfunktion              
 @tf.sg_train_func
 def alt_train(sess, opt):
-    l_disc = sess.run([loss_disc, train_disc])[0]  # training discriminator
-    l_gen = sess.run([loss_gen, train_gen])[0]  # training generator
+    l_disc = sess.run([loss_disc, train_disc])[0]  # Training des Diskriminators
+    l_gen = sess.run([loss_gen, train_gen])[0]  #Training des Generators
     return np.mean(l_disc) + np.mean(l_gen)
 
 
-# do training
+#Anzahl der Trainingsepochen bestimmen
 alt_train(log_interval=10, max_ep=max_ep, ep_size=data.num_batch, early_stop=False)
 
