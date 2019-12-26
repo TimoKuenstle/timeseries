@@ -1,82 +1,64 @@
-# -*- coding: utf-8 -*-
+# Pakete Laden
 import sugartensor as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
 
-__author__ = 'njkim@jamonglab.com'
-
-# set log level to debug
 tf.sg_verbosity(10)
 
+# Hyper Parameter bestimmen
 
-#
-# hyper parameters
-#
-
-batch_size = 100   # batch size
-num_category = 10  # category variable number
-num_cont = 3   # continuous variable number
-num_dim = 50   # total latent dimension ( category + continuous + noise )
+batch_size = 100   # Batchsize
+num_category = 10  # Anzahl der kategorischen Variablen
+num_cont = 3   # Anzahl der zu erzeugenden Zeitreihen
+num_dim = 50   # Anzahl der latenten Dimensionen 
 window = 384
 
 
-#
-# inputs
-#
+# Inputs
 
-# target_number
 target_num = tf.placeholder(dtype=tf.sg_intx, shape=batch_size)
-# target continuous variable # 1
 target_cval_1 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size)
-# target continuous variable # 2
 target_cval_2 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size)
 target_cval_3 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size)
 
 
-# category variables
+# Kategorischen Variablen erzeugen
 z = (tf.ones(batch_size, dtype=tf.sg_intx) * target_num).sg_one_hot(depth=num_category)
 
-# continuous variables
+# Zeitreihenvariabln erzeugen
 z = z.sg_concat(target=[target_cval_1.sg_expand_dims(), target_cval_2.sg_expand_dims(), target_cval_3.sg_expand_dims()])
 
-# random seed = categorical variable + continuous variable + random uniform
+# Zufälliger Seed
 z = z.sg_concat(target=tf.random_uniform((batch_size, num_dim-num_cont-num_category)))
 
-
-#
-# create generator
-#
-
-# generator network
+# Generator Netzwerk (Analog zu train.py)
 with tf.sg_context(name='generator', size=(4, 1), stride=(2, 1), act='relu', bn=True):
     gen = (z.sg_dense(dim=1024)
            .sg_dense(dim=window/8*1*128)
            .sg_reshape(shape=(-1, window/8, 1, 128))
            .sg_upconv(dim=64)
            .sg_upconv(dim=32)
-           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))#.sg_squeeze())
+           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))
 
+#Generator ausführen
+#Dafür erst Generator aufrufen und und Spalten definieren
 
-#
-# run generator
-#
 def run_generator(num, x1, x2, x3, fig_name='sample.png', csv_name='sample.csv'):
     with tf.Session() as sess:
         tf.sg_init(sess)
-        # restore parameters
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint('asset/train'))
 
-        # run generator
+        # Generator ausführen mit Zielwerte, wo die Zeitreihen erzeugt werden. #target_cval = #Zeitreihen
         imgs = sess.run(gen, {target_num: num,
                               target_cval_1: x1,
                               target_cval_2: x2,
                               target_cval_3: x3})
         print(imgs.shape)
 
-        #imgs ist numpy.ndarray
+        #imgs ist ein numpy.ndarray
 
         # plot result
         _, ax = plt.subplots(10, 10, sharex=True, sharey=True)
@@ -93,24 +75,21 @@ def run_generator(num, x1, x2, x3, fig_name='sample.png', csv_name='sample.csv')
         plt.close()
 
 
-#
-# draw sample by categorical division
-#
+# Ziehen von Stichproben der erzeugten Daten
 
-# fake image
+# gefälschtes Bild
 run_generator(np.random.randint(0, num_category, batch_size),
               np.random.uniform(0, 1, batch_size), np.random.uniform(0, 1, batch_size),
               np.random.uniform(0, 1, batch_size),
               fig_name='fake.png', csv_name='fake.csv')
 
-# classified image
+# klassifiziertes Bild
 run_generator(np.arange(num_category).repeat(num_category),
               np.random.uniform(0, 1, batch_size), np.random.uniform(0, 1, batch_size),
               np.random.uniform(0, 1, batch_size))
 
-#
-# draw sample by continuous division
-#
+
+# Stichprobe ziehen
 
 for i in range(10):
     run_generator(np.ones(batch_size) * i,
