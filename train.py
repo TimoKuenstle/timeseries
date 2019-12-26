@@ -1,4 +1,3 @@
-
 import sugartensor as tf
 import numpy as np
 
@@ -7,13 +6,13 @@ class TimeSeriesData(object):
 
     def __init__(self, batch_size=128):
 
-        #Laden des Trainingsdatensatzes
+        # Laden des Trainingsdatensatzes
         x = np.genfromtxt('asset/data/sample.csv', delimiter=',', dtype=np.float32) 
         x = x[1:, 1:]
 
-        window = 384  # Fenstergröße, gibt unter anderem die Anzahl an generierten Beobachtungen an.  
+        window = 376  # Fenstergröße, gibt unter anderem die Anzahl an generierten Beobachtungen an.  
        
-        #Normieren der Daten
+        # Normieren der Daten
         max = np.amax(x) #Maximalwert über alle Daten bestimmen
         print("Maximum", max)
 
@@ -22,7 +21,7 @@ class TimeSeriesData(object):
         n = ((np.where(np.any(x, axis=1))[0][-1] + 1) // window) * window 
 
         # Daten zwischen 0 und 1 normieren um die Leistungsfähigkeit des GANs zu optimieren 
-        #und die Rechenzeiten zu minimieren
+        # und die Rechenzeiten zu minimieren
         x = x[:n] / max
         print(x)
 
@@ -46,7 +45,7 @@ tf.sg_verbosity(10)
 # Hyper Parameter bestimmen
 
 batch_size = 128   # Batchsize bestimmen 
-num_category = 10  # Anzahl an kotegorischen Variablen definieren 
+num_category = 10  # Anzahl an kategorischen Variablen definieren 
 num_cont = 3   # Anzahl der zu erzeugenden Zeitreihen 
 num_dim = 50   # Anzahl an latenten Dimensionen 
 max_ep = 100   # Anzahl an Trainingsepochen
@@ -78,11 +77,11 @@ z_cont = z[:, num_category:num_category+num_cont]
 # Definieren des Generatornetzwerkes 
 with tf.sg_context(name='generator', size=(4, 1), stride=(2, 1), act='relu', bn=True):
     gen = (z.sg_dense(dim=1024)
-           .sg_dense(dim=window / 8*1*128) #Fenstergröße muss in diesem Fall durch 8 teilbar sein
+           .sg_dense(dim=window / 8*1*128) # Fenstergröße muss in diesem Fall durch 8 teilbar sein
            .sg_reshape(shape=(-1, window/8, 1, 128))
            .sg_upconv(dim=64)
            .sg_upconv(dim=32)
-           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  #Outputdimension der Spalten entspricht der Anzahl des Lerndatensatzes
+           .sg_upconv(dim=num_cont, act='sigmoid', bn=False))  # Outputdimension der Spalten entspricht der Anzahl des Lerndatensatzes
 
 
 # Diskriminator
@@ -116,14 +115,14 @@ train_gen = tf.sg_optim(loss_gen + loss_recog, lr=0.001, category='generator')  
 
 # Trainingsprozess des GANs
               
-#Definiere Trainingsfunktion              
+# Definiere Trainingsfunktion              
 @tf.sg_train_func
 def alt_train(sess, opt):
     l_disc = sess.run([loss_disc, train_disc])[0]  # Training des Diskriminators
-    l_gen = sess.run([loss_gen, train_gen])[0]  #Training des Generators
+    l_gen = sess.run([loss_gen, train_gen])[0]  # Training des Generators
     return np.mean(l_disc) + np.mean(l_gen)
 
 
-#Anzahl der Trainingsepochen bestimmen
+# Anzahl der Trainingsepochen bestimmen
 alt_train(log_interval=10, max_ep=max_ep, ep_size=data.num_batch, early_stop=False)
 
