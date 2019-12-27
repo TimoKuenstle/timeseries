@@ -10,7 +10,8 @@ class TimeSeriesData(object):
         x = np.genfromtxt('asset/data/sample.csv', delimiter=',', dtype=np.float32) 
         x = x[1:, 1:]
 
-        window = 376  # Fenstergröße, gibt unter anderem die Anzahl an generierten Beobachtungen an.  
+        window = 376  # Fenstergröße, gibt unter anderem die Anzahl an generierten Beobachtungen an. 
+        # Darf maximal (Anzahl Zeilen der Trainingsdatei / 2) - 1 sein.
        
         # Normieren der Daten
         max = np.amax(x) #Maximalwert über alle Daten bestimmen

@@ -13,7 +13,7 @@ batch_size = 100   # Batchsize
 num_category = 10  # Anzahl der kategorischen Variablen
 num_cont = 3   # Anzahl der zu erzeugenden Zeitreihen
 num_dim = 50   # Anzahl der latenten Dimensionen 
-window = 384
+window = 376 # Analog zu train.py. Darf maximal (Anzahl Zeilen der Trainingsdatei / 2) - 1 sein.
 
 
 # Inputs
@@ -21,13 +21,14 @@ window = 384
 target_num = tf.placeholder(dtype=tf.sg_intx, shape=batch_size)
 target_cval_1 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size)
 target_cval_2 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size)
-target_cval_3 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size)
+target_cval_3 = tf.placeholder(dtype=tf.sg_floatx, shape=batch_size) 
+# Anzahl der Variablen ist abhängig von der Anzahl der zu erzeugenden Zeitreihen.
 
 
 # Kategorischen Variablen erzeugen
 z = (tf.ones(batch_size, dtype=tf.sg_intx) * target_num).sg_one_hot(depth=num_category)
 
-# Zeitreihenvariabln erzeugen
+# Zeitreihenvariabln erzeugen, Anzahl der Variablen ist abhängig von der Anzahl der zu erzeugenden Zeitreihen.
 z = z.sg_concat(target=[target_cval_1.sg_expand_dims(), target_cval_2.sg_expand_dims(), target_cval_3.sg_expand_dims()])
 
 # Zufälliger Seed
@@ -44,6 +45,7 @@ with tf.sg_context(name='generator', size=(4, 1), stride=(2, 1), act='relu', bn=
 
 #Generator ausführen
 #Dafür erst Generator aufrufen und und Spalten definieren
+#Anzahl der Variablen ist abhängig von der Anzahl der zu erzeugenden Zeitreihen.
 
 def run_generator(num, x1, x2, x3, fig_name='sample.png', csv_name='sample.csv'):
     with tf.Session() as sess:
@@ -77,6 +79,7 @@ def run_generator(num, x1, x2, x3, fig_name='sample.png', csv_name='sample.csv')
 
 # Ziehen von Stichproben der erzeugten Daten
 
+# Anzahl der Argumente ist abhängig von der Anzahl der zu erzeugenden Zeitreihen.
 # gefälschtes Bild
 run_generator(np.random.randint(0, num_category, batch_size),
               np.random.uniform(0, 1, batch_size), np.random.uniform(0, 1, batch_size),
